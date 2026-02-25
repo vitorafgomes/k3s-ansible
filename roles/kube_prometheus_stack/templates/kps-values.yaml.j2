@@ -25,18 +25,20 @@ prometheus-node-exporter:
     limits:
       cpu: 100m
       memory: 64Mi
+  # NOTE: probe path is hardcoded to / in subchart template (not configurable).
+  # Post-upgrade task patches DaemonSet to use /metrics instead.
   livenessProbe:
     httpGet:
-      path: /metrics
-      port: http-metrics
+      httpHeaders: []
+      scheme: http
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
   readinessProbe:
     httpGet:
-      path: /metrics
-      port: http-metrics
+      httpHeaders: []
+      scheme: http
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 5

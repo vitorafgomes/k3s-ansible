@@ -75,6 +75,23 @@
         --timeout=120s
       changed_when: false
 
+    - name: Patch node-exporter DaemonSet probe path (chart hardcodes / instead of /metrics)
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} patch daemonset {{ kps_release_name }}-prometheus-node-exporter
+        --namespace={{ monitoring_namespace }}
+        --type=json
+        -p='[{"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/httpGet/path","value":"/metrics"},{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/metrics"}]'
+      register: ne_patch
+      changed_when: "'patched' in ne_patch.stdout"
+      failed_when: ne_patch.rc != 0
+
+    - name: Wait for node-exporter DaemonSet rollout
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} rollout status daemonset/{{ kps_release_name }}-prometheus-node-exporter
+        --namespace={{ monitoring_namespace }}
+        --timeout=300s
+      changed_when: false
+
     - name: Verify kube-prometheus-stack pods
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "release={{ kps_release_name }}"
