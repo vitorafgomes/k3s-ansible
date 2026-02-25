@@ -182,7 +182,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant.Worker\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / clamp_min(sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval])), 1)",
+              "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / clamp_min(sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant\"}[$__rate_interval])), 1)",
               "legendFormat": "error %",
               "refId": "A"
             }
@@ -369,7 +369,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant.Worker|smart-management-ui\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))",
+              "expr": "sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant|smart-management-ui-shell|smart-management-ui\", span_kind=\"SPAN_KIND_SERVER\"}[$__rate_interval]))",
               "legendFormat": "{{ service }}",
               "refId": "A"
             }
@@ -430,7 +430,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant.Worker\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / clamp_min(sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval])), 1)",
+              "expr": "sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant|smart-management-ui-shell|smart-management-ui\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / clamp_min(sum by (service) (rate(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant|smart-management-ui-shell|smart-management-ui\"}[$__rate_interval])), 1)",
               "legendFormat": "{{ service }}",
               "refId": "A"
             }
@@ -491,7 +491,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum by (le) (increase(traces_spanmetrics_latency_bucket{service=\"smart-management-ui\", span_kind=\"SPAN_KIND_CLIENT\"}[$__rate_interval]))",
+              "expr": "sum by (le) (increase(traces_spanmetrics_latency_bucket{service=~\"smart-management-ui-shell|smart-management-ui\", span_kind=\"SPAN_KIND_CLIENT\"}[$__rate_interval]))",
               "format": "heatmap",
               "legendFormat": "{{ le }}",
               "refId": "A"
@@ -615,7 +615,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum by (service) (increase(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant.Worker|smart-management-ui\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval]))",
+              "expr": "sum by (service) (increase(traces_spanmetrics_calls_total{service=~\"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant|smart-management-ui-shell|smart-management-ui\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval]))",
               "legendFormat": "{{ service }}",
               "refId": "A"
             }
@@ -695,7 +695,7 @@ data:
             {
               "datasource": { "type": "tempo", "uid": "${datasource_tempo}" },
               "queryType": "traceql",
-              "query": "{resource.service.name =~ \"Smart.Management.Identity.Tenant.Api|Smart.Management.Identity.Tenant.Worker\" && span.kind = server} | select(span.http.route, span.http.status_code, resource.service.name) | where(duration > 1s)",
+              "query": "{resource.service.name =~ \"Smart.Management.Identity.Tenant.*\" && kind = server} | where(duration > 1s)",
               "tableType": "traces",
               "limit": 20,
               "refId": "A"
@@ -824,7 +824,7 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval]))",
+              "expr": "sum(rate(traces_spanmetrics_calls_total{service=\"Smart.Management.Identity.Tenant\"}[$__rate_interval]))",
               "legendFormat": "messages/s",
               "refId": "A"
             }
@@ -898,19 +898,19 @@ data:
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "histogram_quantile(0.50, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.50, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant\"}[$__rate_interval])) by (le))",
               "legendFormat": "P50",
               "refId": "A"
             },
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant\"}[$__rate_interval])) by (le))",
               "legendFormat": "P95",
               "refId": "B"
             },
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-              "expr": "histogram_quantile(0.99, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant.Worker\"}[$__rate_interval])) by (le))",
+              "expr": "histogram_quantile(0.99, sum(rate(traces_spanmetrics_latency_bucket{service=\"Smart.Management.Identity.Tenant\"}[$__rate_interval])) by (le))",
               "legendFormat": "P99",
               "refId": "C"
             }
