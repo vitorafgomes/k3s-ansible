@@ -437,7 +437,7 @@
       "description": "Trace duration distribution for the Frontend service (smart-management-ui), showing how long end-user operations take.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "scheme", "schemeName": "BuPu" },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
