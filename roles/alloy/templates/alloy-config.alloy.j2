@@ -25,7 +25,7 @@ otelcol.processor.batch "default" {
   output {
     traces  = [otelcol.exporter.otlp.tempo.input]
     metrics = [otelcol.exporter.prometheus.default.input]
-    logs    = [otelcol.exporter.loki.default.input]
+    logs    = [otelcol.exporter.otlphttp.loki.input]
   }
 }
 
@@ -41,6 +41,17 @@ otelcol.exporter.otlp "tempo" {
       insecure = true
     }
   }
+  sending_queue {
+    enabled       = true
+    num_consumers = 10
+    queue_size    = 1000
+  }
+  retry_on_failure {
+    enabled          = true
+    initial_interval = "5s"
+    max_interval     = "30s"
+    max_elapsed_time = "120s"
+  }
 }
 
 // Metrics -> Prometheus (remote write)
@@ -54,9 +65,12 @@ prometheus.remote_write "default" {
   }
 }
 
-// Logs -> Loki
-otelcol.exporter.loki "default" {
-  forward_to = [loki.write.default.receiver]
+// Logs -> Loki (via OTLP endpoint)
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = "http://loki-gateway.{{ monitoring_namespace }}.svc.cluster.local/otlp"
+    timeout  = "30s"
+  }
 }
 
 loki.write "default" {
@@ -115,6 +129,29 @@ discovery.relabel "pod_logs" {
     source_labels = ["__meta_kubernetes_pod_node_name"]
     target_label  = "node"
   }
+
+  // Extract app identification labels
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance"]
+    target_label  = "app_instance"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+    target_label  = "app"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+    target_label  = "component"
+  }
+
+  // Fallback: use "app" pod label if app.kubernetes.io/name is empty
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    regex         = "(.+)"
+    target_label  = "app"
+  }
 }
 
 loki.source.kubernetes "pod_logs" {
@@ -123,24 +160,62 @@ loki.source.kubernetes "pod_logs" {
 }
 
 loki.process "pod_logs" {
+  // Parse JSON logs
   stage.json {
     expressions = {
-      level   = "level",
-      msg     = "msg",
-      logger  = "logger",
+      level     = "level",
+      severity  = "severity",
+      msg       = "msg",
+      message   = "message",
+      timestamp = "timestamp",
+      time      = "time",
+      trace_id  = "trace_id",
+      traceId   = "traceId",
+      traceID   = "traceID",
+      logger    = "logger",
     }
   }
 
+  // Store structured metadata for Grafana Fields tab
   stage.structured_metadata {
     values = {
-      level  = "level",
-      logger = "logger",
+      level     = "",
+      severity  = "",
+      msg       = "",
+      message   = "",
+      trace_id  = "",
+      traceId   = "",
+      traceID   = "",
+      logger    = "",
     }
+  }
+
+  // Promote level as Loki label for fast filtering
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // Regex fallback: extract severity from non-JSON logs
+  stage.regex {
+    expression = "(?i)(?P<severity>debug|info|warn|warning|error|fatal|panic)"
   }
 
   stage.labels {
     values = {
-      level = "",
+      severity = "",
+    }
+  }
+
+  // Regex fallback: extract trace_id from non-JSON logs
+  stage.regex {
+    expression = "(?i)trace_?id[=:\\s]+(?P<trace_id>[0-9a-fA-F]{16,32})"
+  }
+
+  stage.structured_metadata {
+    values = {
+      trace_id = "",
     }
   }
 
@@ -157,6 +232,13 @@ discovery.relabel "metrics_services" {
     source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape"]
     regex         = "true"
     action        = "keep"
+  }
+
+  // Exclude monitoring namespace - already scraped via ServiceMonitors
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    regex         = "monitoring"
+    action        = "drop"
   }
 
   rule {
