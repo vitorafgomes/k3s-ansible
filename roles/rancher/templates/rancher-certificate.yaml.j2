@@ -1,0 +1,13 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "{{ rancher_cert_secret_name }}"
+  namespace: "{{ rancher_namespace }}"
+spec:
+  secretName: "{{ rancher_cert_secret_name }}"
+  dnsNames:
+    - "{{ rancher_hostname }}"
+  issuerRef:
+    name: "{{ rancher_cert_issuer }}"
+    kind: ClusterIssuer

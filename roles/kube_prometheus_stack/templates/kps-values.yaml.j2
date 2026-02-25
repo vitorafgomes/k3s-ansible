@@ -1,0 +1,20 @@
+alertmanager:
+  enabled: true
+
+grafana:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    enableRemoteWriteReceiver: true
+    resources:
+      limits:
+        cpu: "{{ prometheus_resources_limits_cpu }}"
+        memory: {{ prometheus_resources_limits_memory }}
+      requests:
+        cpu: {{ prometheus_resources_requests_cpu }}
+        memory: {{ prometheus_resources_requests_memory }}
+    retention: {{ prometheus_retention }}
+
+prometheus-node-exporter:
+  enabled: true

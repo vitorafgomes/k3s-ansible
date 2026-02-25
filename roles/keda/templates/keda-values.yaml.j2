@@ -1,0 +1,65 @@
+operator:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: {{ keda_operator_cpu_requests }}
+      memory: {{ keda_operator_memory_requests }}
+    limits:
+      cpu: {{ keda_operator_cpu_limits }}
+      memory: {{ keda_operator_memory_limits }}
+
+metricsServer:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: {{ keda_metrics_server_cpu_requests }}
+      memory: {{ keda_metrics_server_memory_requests }}
+    limits:
+      cpu: {{ keda_metrics_server_cpu_limits }}
+      memory: {{ keda_metrics_server_memory_limits }}
+
+webhooks:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: {{ keda_webhooks_cpu_requests }}
+      memory: {{ keda_webhooks_memory_requests }}
+    limits:
+      cpu: {{ keda_webhooks_cpu_limits }}
+      memory: {{ keda_webhooks_memory_limits }}
+
+logging:
+  operator:
+    format: console
+  metricServer:
+    format: console
+  webhooks:
+    format: console
+
+{% if keda_service_monitor_enabled %}
+prometheus:
+  operator:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  metricServer:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  webhooks:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+{% endif %}
+
+{% if keda_otel_collector_uri | length > 0 %}
+opentelemetry:
+  operator:
+    enabled: true
+    otlpExporter:
+      grpcEndpoint: {{ keda_otel_collector_uri }}
+  metricsServer:
+    enabled: true
+    otlpExporter:
+      grpcEndpoint: {{ keda_otel_collector_uri }}
+{% endif %}

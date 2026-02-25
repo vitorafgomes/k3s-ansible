@@ -1,0 +1,67 @@
+---
+- name: Deploy Grafana
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ monitoring_namespace }}
+      register: monitoring_ns
+      failed_when: monitoring_ns.rc != 0 and 'already exists' not in monitoring_ns.stderr
+      changed_when: monitoring_ns.rc == 0
+
+    - name: Add Grafana Helm repo
+      ansible.builtin.command: helm repo add grafana https://grafana.github.io/helm-charts
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template Grafana Helm values
+      ansible.builtin.template:
+        src: grafana-values.yaml.j2
+        dest: /tmp/k3s/grafana-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install/Upgrade Grafana via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install {{ grafana_release_name }} grafana/grafana
+        --namespace {{ monitoring_namespace }}
+        --version {{ grafana_chart_version }}
+        -f /tmp/k3s/grafana-values.yaml
+        --wait
+        --timeout 5m
+      register: grafana_install
+      changed_when: "'has been upgraded' in grafana_install.stdout or 'has been installed' in grafana_install.stdout"
+
+    - name: Wait for Grafana deployment to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/grafana
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: grafana_wait
+      changed_when: false
+      until: grafana_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Verify Grafana pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/name=grafana"
+      changed_when: false

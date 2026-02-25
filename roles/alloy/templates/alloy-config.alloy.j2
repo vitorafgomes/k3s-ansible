@@ -1,0 +1,289 @@
+// =============================================================================
+// OTLP Receiver
+// =============================================================================
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+  }
+}
+
+// =============================================================================
+// Batch Processor
+// =============================================================================
+otelcol.processor.batch "default" {
+  send_batch_size     = 1000
+  timeout             = "10s"
+  send_batch_max_size = 2000
+  output {
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.default.input]
+    logs    = [otelcol.exporter.loki.default.input]
+  }
+}
+
+// =============================================================================
+// Exporters
+// =============================================================================
+
+// Traces -> Tempo
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "{{ alloy_tempo_endpoint }}"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// Metrics -> Prometheus (remote write)
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "{{ alloy_prometheus_endpoint }}"
+  }
+}
+
+// Logs -> Loki
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "{{ alloy_loki_endpoint }}"
+  }
+}
+
+// =============================================================================
+// Kubernetes Discovery
+// =============================================================================
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+discovery.kubernetes "services" {
+  role = "service"
+}
+
+discovery.kubernetes "endpoints" {
+  role = "endpoints"
+}
+
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+// =============================================================================
+// Log Collection - All pods (except monitoring namespace self-logs)
+// =============================================================================
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    regex         = "monitoring"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+loki.source.kubernetes "pod_logs" {
+  targets    = discovery.relabel.pod_logs.output
+  forward_to = [loki.process.pod_logs.receiver]
+}
+
+loki.process "pod_logs" {
+  stage.json {
+    expressions = {
+      level   = "level",
+      msg     = "msg",
+      logger  = "logger",
+    }
+  }
+
+  stage.structured_metadata {
+    values = {
+      level  = "level",
+      logger = "logger",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// =============================================================================
+// Metrics Scraping - Annotated services (prometheus.io/scrape=true)
+// =============================================================================
+discovery.relabel "metrics_services" {
+  targets = discovery.kubernetes.endpoints.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_port"]
+    regex         = "(\\d+)"
+    target_label  = "__address__"
+    replacement   = "$${1}"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_name"]
+    target_label  = "service"
+  }
+}
+
+prometheus.scrape "annotated_services" {
+  targets    = discovery.relabel.metrics_services.output
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// Traefik metrics
+discovery.relabel "traefik" {
+  targets = discovery.kubernetes.services.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_service_name"]
+    regex         = "traefik;traefik"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_port_name"]
+    regex         = "metrics"
+    action        = "keep"
+  }
+}
+
+prometheus.scrape "traefik" {
+  targets    = discovery.relabel.traefik.output
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// kubelet / cAdvisor
+discovery.relabel "kubelet" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc.cluster.local:443"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/$${1}/proxy/metrics/cadvisor"
+  }
+}
+
+prometheus.scrape "kubelet" {
+  targets      = discovery.relabel.kubelet.output
+  scheme       = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    insecure_skip_verify = true
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// =============================================================================
+// Pyroscope Profiling - Pods with pyroscope.io/scrape=true
+// =============================================================================
+discovery.relabel "pyroscope_pods" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_pyroscope_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_pyroscope_io_port"]
+    regex         = "(\\d+)"
+    target_label  = "__address__"
+    replacement   = "$${1}"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+pyroscope.scrape "default" {
+  targets    = discovery.relabel.pyroscope_pods.output
+  forward_to = [pyroscope.write.default.receiver]
+
+  profiling_config {
+    profile.process_cpu {
+      enabled = true
+    }
+    profile.memory {
+      enabled = true
+    }
+  }
+}
+
+pyroscope.write "default" {
+  endpoint {
+    url = "{{ alloy_pyroscope_endpoint }}"
+  }
+}

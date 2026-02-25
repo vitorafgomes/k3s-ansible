@@ -1,0 +1,91 @@
+---
+- name: Deploy KEDA
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create KEDA namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ keda_namespace }}
+      register: keda_ns
+      failed_when: keda_ns.rc != 0 and 'already exists' not in keda_ns.stderr
+      changed_when: keda_ns.rc == 0
+
+    - name: Add KEDA Helm repo
+      ansible.builtin.command: helm repo add kedacore https://kedacore.github.io/charts
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template KEDA Helm values
+      ansible.builtin.template:
+        src: keda-values.yaml.j2
+        dest: /tmp/k3s/keda-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install/Upgrade KEDA via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install {{ keda_release_name }} kedacore/keda
+        --namespace {{ keda_namespace }}
+        --version {{ keda_chart_version }}
+        -f /tmp/k3s/keda-values.yaml
+        --wait
+        --timeout 5m
+      register: keda_install
+      changed_when: "'has been upgraded' in keda_install.stdout or 'has been installed' in keda_install.stdout"
+
+    - name: Wait for KEDA operator deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/keda-operator
+        --namespace={{ keda_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: keda_operator_wait
+      changed_when: false
+      until: keda_operator_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Wait for KEDA metrics server deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/keda-operator-metrics-apiserver
+        --namespace={{ keda_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: keda_metrics_wait
+      changed_when: false
+      until: keda_metrics_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Wait for KEDA admission webhooks deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/keda-admission-webhooks
+        --namespace={{ keda_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: keda_webhooks_wait
+      changed_when: false
+      until: keda_webhooks_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Verify KEDA pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ keda_namespace }}
+      changed_when: false

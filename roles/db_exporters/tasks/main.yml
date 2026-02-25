@@ -1,0 +1,105 @@
+---
+- name: Deploy database exporters
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ monitoring_namespace }}
+      register: monitoring_ns
+      failed_when: monitoring_ns.rc != 0 and 'already exists' not in monitoring_ns.stderr
+      changed_when: monitoring_ns.rc == 0
+
+    # --- MongoDB Exporter ---
+    - name: Template MongoDB exporter manifest
+      ansible.builtin.template:
+        src: mongodb-exporter.yaml.j2
+        dest: /tmp/k3s/mongodb-exporter.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      when: deploy_mongodb_exporter | bool
+
+    - name: Apply MongoDB exporter
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/mongodb-exporter.yaml
+      register: mongodb_result
+      changed_when: "'created' in mongodb_result.stdout or 'configured' in mongodb_result.stdout"
+      when: deploy_mongodb_exporter | bool
+
+    - name: Wait for MongoDB exporter deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/mongodb-exporter
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      changed_when: false
+      when: deploy_mongodb_exporter | bool and mongodb_exporter_uri | default('') | length > 0
+
+    # --- PostgreSQL Exporter ---
+    - name: Template PostgreSQL exporter manifest
+      ansible.builtin.template:
+        src: postgres-exporter.yaml.j2
+        dest: /tmp/k3s/postgres-exporter.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      when: deploy_postgres_exporter | bool
+
+    - name: Apply PostgreSQL exporter
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/postgres-exporter.yaml
+      register: postgres_result
+      changed_when: "'created' in postgres_result.stdout or 'configured' in postgres_result.stdout"
+      when: deploy_postgres_exporter | bool
+
+    - name: Wait for PostgreSQL exporter deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/postgres-exporter
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      changed_when: false
+      when: deploy_postgres_exporter | bool and postgres_exporter_uri | default('') | length > 0
+
+    # --- Redis Exporter ---
+    - name: Template Redis exporter manifest
+      ansible.builtin.template:
+        src: redis-exporter.yaml.j2
+        dest: /tmp/k3s/redis-exporter.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      when: deploy_redis_exporter | bool
+
+    - name: Apply Redis exporter
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/redis-exporter.yaml
+      register: redis_result
+      changed_when: "'created' in redis_result.stdout or 'configured' in redis_result.stdout"
+      when: deploy_redis_exporter | bool
+
+    - name: Wait for Redis exporter deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/redis-exporter
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      changed_when: false
+      when: deploy_redis_exporter | bool and redis_exporter_address | default('') | length > 0
+
+    # --- Verification ---
+    - name: Verify exporter pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/component=exporter"
+      changed_when: false

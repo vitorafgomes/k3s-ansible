@@ -1,0 +1,67 @@
+---
+- name: Deploy Pyroscope
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ monitoring_namespace }}
+      register: monitoring_ns
+      failed_when: monitoring_ns.rc != 0 and 'already exists' not in monitoring_ns.stderr
+      changed_when: monitoring_ns.rc == 0
+
+    - name: Add Grafana Helm repo
+      ansible.builtin.command: helm repo add grafana https://grafana.github.io/helm-charts
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template Pyroscope Helm values
+      ansible.builtin.template:
+        src: pyroscope-values.yaml.j2
+        dest: /tmp/k3s/pyroscope-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install/Upgrade Pyroscope via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install {{ pyroscope_release_name }} grafana/pyroscope
+        --namespace {{ monitoring_namespace }}
+        --version {{ pyroscope_chart_version }}
+        -f /tmp/k3s/pyroscope-values.yaml
+        --wait
+        --timeout 5m
+      register: pyroscope_install
+      changed_when: "'has been upgraded' in pyroscope_install.stdout or 'has been installed' in pyroscope_install.stdout"
+
+    - name: Wait for Pyroscope deployment to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/pyroscope
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: pyroscope_wait
+      changed_when: false
+      until: pyroscope_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Verify Pyroscope pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/name=pyroscope"
+      changed_when: false

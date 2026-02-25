@@ -1,0 +1,19 @@
+---
+monitoring_namespace: monitoring
+otel_collector_image: "otel/opentelemetry-collector-contrib:0.146.1"
+otel_collector_grpc_port: 4317
+otel_collector_extra_port: 12347
+otel_collector_batch_size: 100
+otel_collector_debug_verbosity: "detailed"
+otel_collector_gomemlimit: "400MiB"
+
+otel_collector_cors_origins:
+  - "https://vitorafgomes.net"
+  - "https://www.vitorafgomes.net"
+  - "https://*.vitorafgomes.net"
+  - "http://localhost:4200"
+
+otel_collector_resources_requests_cpu: "100m"
+otel_collector_resources_requests_memory: "256Mi"
+otel_collector_resources_limits_cpu: "500m"
+otel_collector_resources_limits_memory: "512Mi"

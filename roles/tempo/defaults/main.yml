@@ -1,0 +1,7 @@
+---
+monitoring_namespace: monitoring
+tempo_release_name: tempo
+tempo_chart_version: "1.24.4"
+tempo_block_retention: 48h
+tempo_max_bytes_per_trace: 5000000
+tempo_remote_write_url: "http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/write"

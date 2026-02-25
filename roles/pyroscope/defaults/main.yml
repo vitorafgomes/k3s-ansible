@@ -1,0 +1,6 @@
+---
+monitoring_namespace: monitoring
+pyroscope_release_name: pyroscope
+pyroscope_chart_version: "1.18.1"
+pyroscope_replicas: 1
+pyroscope_storage_size: 10Gi

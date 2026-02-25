@@ -1,0 +1,246 @@
+---
+- name: Verify cluster is operational
+  hosts: master
+  pre_tasks:
+    - name: Verify Ansible is version 2.11 or above.
+      ansible.builtin.assert:
+        that: ansible_version.full is version_compare('2.11', '>=')
+        msg: >
+          "Ansible is out of date."
+
+    - name: Check k3s is running
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get nodes
+      changed_when: false
+      run_once: true
+      become: true
+
+# =============================================================================
+# Phase 1 - Base Infrastructure
+# =============================================================================
+
+- name: Install prerequisites (Helm CLI)
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [infra-base]
+  roles:
+    - role: helm_install
+
+- name: Deploy cert-manager
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [infra-base, cert-manager]
+  roles:
+    - role: cert_manager
+
+- name: Deploy Traefik ingress controller
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [infra-base, traefik]
+  roles:
+    - role: traefik
+
+- name: Deploy Traefik middlewares
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [infra-base, traefik]
+  roles:
+    - role: traefik_middlewares
+
+- name: Deploy Cloudflare Tunnel
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [infra-base, cloudflare]
+  roles:
+    - role: cloudflare_tunnel
+
+- name: Verify Phase 1 deployment
+  hosts: master
+  tags: [infra-base]
+  tasks:
+    - name: Verify cert-manager pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n cert-manager -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify Traefik pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n traefik -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify Cloudflare Tunnel pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n cloudflare-tunnel -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify ClusterIssuers
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get clusterissuers
+      changed_when: false
+      run_once: true
+
+# =============================================================================
+# Phase 2 - Monitoring Stack
+# =============================================================================
+
+- name: Deploy kube-prometheus-stack
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, kps]
+  roles:
+    - role: kube_prometheus_stack
+
+- name: Deploy Loki
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, loki]
+  roles:
+    - role: loki
+
+- name: Deploy Tempo
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, tempo]
+  roles:
+    - role: tempo
+
+- name: Deploy Pyroscope
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, pyroscope]
+  roles:
+    - role: pyroscope
+
+- name: Deploy Grafana
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, grafana]
+  roles:
+    - role: grafana
+
+- name: Deploy Alloy
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, alloy]
+  roles:
+    - role: alloy
+
+- name: Deploy database exporters
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, db-exporters]
+  roles:
+    - role: db_exporters
+
+- name: Deploy OpenTelemetry Collector
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [monitoring, otel-collector]
+  roles:
+    - role: otel_collector
+
+- name: Verify Phase 2 monitoring deployment
+  hosts: master
+  tags: [monitoring]
+  tasks:
+    - name: Verify monitoring pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n monitoring -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify monitoring services
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get svc -n monitoring
+      changed_when: false
+      run_once: true
+
+    - name: Verify Helm releases in monitoring namespace
+      ansible.builtin.command: helm list -n monitoring
+      changed_when: false
+      run_once: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# =============================================================================
+# Phase 3 - Autoscaling & Identity
+# =============================================================================
+
+- name: Deploy KEDA
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [autoscaling, keda]
+  roles:
+    - role: keda
+
+- name: Deploy Rancher
+  hosts: master
+  become: true
+  environment: "{{ proxy_env | default({}) }}"
+  tags: [autoscaling, rancher]
+  roles:
+    - role: rancher
+
+- name: Verify Phase 3 deployment
+  hosts: master
+  tags: [autoscaling]
+  tasks:
+    - name: Verify KEDA pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n keda -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify KEDA CRDs
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get crd -l app.kubernetes.io/name=keda-operator
+      changed_when: false
+      run_once: true
+
+    - name: Verify Rancher pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n cattle-system -o wide
+      changed_when: false
+      run_once: true
+
+    - name: Verify Rancher certificate
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get certificate -n cattle-system
+      changed_when: false
+      run_once: true
+
+    - name: Verify Rancher IngressRoute
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get ingressroute -n cattle-system
+      changed_when: false
+      run_once: true
+
+# =============================================================================
+# Cleanup
+# =============================================================================
+
+- name: Final cleanup
+  hosts: master
+  tasks:
+    - name: Clean up tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: absent
+      run_once: true

@@ -1,0 +1,28 @@
+---
+keda_namespace: keda
+keda_release_name: keda
+keda_chart_version: "2.18.1"
+
+# Operator resources
+keda_operator_cpu_requests: 100m
+keda_operator_cpu_limits: 1000m
+keda_operator_memory_requests: 128Mi
+keda_operator_memory_limits: 512Mi
+
+# Metrics Server resources
+keda_metrics_server_cpu_requests: 100m
+keda_metrics_server_cpu_limits: 1000m
+keda_metrics_server_memory_requests: 128Mi
+keda_metrics_server_memory_limits: 512Mi
+
+# Webhooks resources
+keda_webhooks_cpu_requests: 50m
+keda_webhooks_cpu_limits: 500m
+keda_webhooks_memory_requests: 64Mi
+keda_webhooks_memory_limits: 256Mi
+
+# Monitoring integration
+keda_service_monitor_enabled: true
+
+# OpenTelemetry integration (empty = disabled)
+keda_otel_collector_uri: ""

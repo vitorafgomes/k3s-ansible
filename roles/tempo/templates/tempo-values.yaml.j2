@@ -1,0 +1,30 @@
+tempo:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  compactor:
+    compaction:
+      block_retention: {{ tempo_block_retention }}
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "{{ tempo_remote_write_url }}"
+  per_tenant_overrides:
+    '*':
+      max_bytes_per_trace: {{ tempo_max_bytes_per_trace }}
+      metrics_generator_processors:
+        - service-graphs
+        - span-metrics
+        - local-blocks
+  search:
+    enabled: true

@@ -1,0 +1,110 @@
+---
+- name: Deploy Rancher
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Rancher namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ rancher_namespace }}
+      register: rancher_ns
+      failed_when: rancher_ns.rc != 0 and 'already exists' not in rancher_ns.stderr
+      changed_when: rancher_ns.rc == 0
+
+    - name: Add Rancher Helm repo
+      ansible.builtin.command: helm repo add rancher-stable https://releases.rancher.com/server-charts/stable
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template Rancher Helm values
+      ansible.builtin.template:
+        src: rancher-values.yaml.j2
+        dest: /tmp/k3s/rancher-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Pull Rancher chart
+      ansible.builtin.command: >-
+        helm pull rancher-stable/rancher
+        --version {{ rancher_chart_version }}
+        --untar
+        --untardir /tmp/k3s
+      args:
+        creates: /tmp/k3s/rancher/Chart.yaml
+
+    - name: Patch kubeVersion constraint for current cluster
+      ansible.builtin.lineinfile:
+        path: /tmp/k3s/rancher/Chart.yaml
+        regexp: '^kubeVersion:'
+        line: "kubeVersion: < 1.36.0-0"
+
+    - name: Install/Upgrade Rancher via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install {{ rancher_release_name }} /tmp/k3s/rancher
+        --namespace {{ rancher_namespace }}
+        -f /tmp/k3s/rancher-values.yaml
+        --wait
+        --timeout 10m
+      register: rancher_install
+      changed_when: "'has been upgraded' in rancher_install.stdout or 'has been installed' in rancher_install.stdout"
+      no_log: true
+
+    - name: Template Rancher certificate manifest
+      ansible.builtin.template:
+        src: rancher-certificate.yaml.j2
+        dest: /tmp/k3s/rancher-certificate.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Rancher certificate
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/rancher-certificate.yaml
+      register: cert_result
+      changed_when: "'created' in cert_result.stdout or 'configured' in cert_result.stdout"
+
+    - name: Template Rancher IngressRoute manifest
+      ansible.builtin.template:
+        src: rancher-ingressroute.yaml.j2
+        dest: /tmp/k3s/rancher-ingressroute.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Rancher IngressRoute
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/rancher-ingressroute.yaml
+      register: ingressroute_result
+      changed_when: "'created' in ingressroute_result.stdout or 'configured' in ingressroute_result.stdout"
+
+    - name: Wait for Rancher deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/rancher
+        --namespace={{ rancher_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: rancher_wait
+      changed_when: false
+      until: rancher_wait is succeeded
+      retries: 10
+      delay: 15
+
+    - name: Verify Rancher pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ rancher_namespace }}
+      changed_when: false

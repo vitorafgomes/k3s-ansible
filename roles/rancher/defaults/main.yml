@@ -1,0 +1,18 @@
+---
+rancher_namespace: cattle-system
+rancher_release_name: rancher
+rancher_chart_version: "2.13.2"
+rancher_hostname: rancher.vitorafgomes.net
+rancher_replicas: 1
+rancher_bootstrap_password: ""
+
+# Resources
+rancher_cpu_requests: 250m
+rancher_cpu_limits: 1000m
+rancher_memory_requests: 256Mi
+rancher_memory_limits: 1Gi
+
+# TLS
+rancher_tls_source: external
+rancher_cert_issuer: letsencrypt-prod
+rancher_cert_secret_name: rancher-tls

@@ -1,0 +1,85 @@
+---
+- name: Deploy Traefik
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create Traefik namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ traefik_namespace }}
+      register: traefik_ns
+      failed_when: traefik_ns.rc != 0 and 'already exists' not in traefik_ns.stderr
+      changed_when: traefik_ns.rc == 0
+
+    - name: Create Cloudflare API token secret in Traefik namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f -
+      args:
+        stdin: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: cloudflare-api-token
+            namespace: "{{ traefik_namespace }}"
+          type: Opaque
+          stringData:
+            CF_DNS_API_TOKEN: "{{ cloudflare_api_token }}"
+      register: cf_secret
+      changed_when: "'created' in cf_secret.stdout or 'configured' in cf_secret.stdout"
+      when: cloudflare_api_token | default('') | length > 0
+      no_log: true
+
+    - name: Add Traefik Helm repo
+      ansible.builtin.command: helm repo add traefik https://traefik.github.io/charts
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template Traefik Helm values
+      ansible.builtin.template:
+        src: traefik-values.yaml.j2
+        dest: /tmp/k3s/traefik-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install/Upgrade Traefik via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install traefik traefik/traefik
+        --namespace {{ traefik_namespace }}
+        --version {{ traefik_chart_version }}
+        -f /tmp/k3s/traefik-values.yaml
+        --wait
+        --timeout 5m
+      register: traefik_install
+      changed_when: "'has been upgraded' in traefik_install.stdout or 'has been installed' in traefik_install.stdout"
+
+    - name: Wait for Traefik deployment to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/traefik
+        --namespace={{ traefik_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: traefik_wait
+      changed_when: false
+      until: traefik_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Verify Traefik pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ traefik_namespace }}
+      changed_when: false

@@ -1,0 +1,33 @@
+---
+- name: Deploy Traefik middlewares
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Template middlewares manifest
+      ansible.builtin.template:
+        src: middlewares.yaml.j2
+        dest: /tmp/k3s/traefik-middlewares.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Traefik middlewares
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/traefik-middlewares.yaml
+      register: middlewares_result
+      changed_when: "'created' in middlewares_result.stdout or 'configured' in middlewares_result.stdout"
+
+    - name: Verify middlewares
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get middlewares -n {{ traefik_namespace }}
+      changed_when: false

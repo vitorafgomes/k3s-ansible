@@ -1,0 +1,22 @@
+---
+monitoring_namespace: monitoring
+
+# MongoDB exporter
+mongodb_exporter_image: "percona/mongodb_exporter:0.40.0"
+mongodb_exporter_port: 9216
+mongodb_exporter_uri: ""  # Override via vault.yml (e.g. mongodb://user:pass@host:27017)
+
+# PostgreSQL exporter
+postgres_exporter_image: "prometheuscommunity/postgres-exporter:v0.15.0"
+postgres_exporter_port: 9187
+postgres_exporter_uri: ""  # Override via vault.yml (e.g. postgresql://user:pass@host:5432/postgres?sslmode=disable)
+
+# Redis exporter
+redis_exporter_image: "oliver006/redis_exporter:v1.62.0"
+redis_exporter_port: 9121
+redis_exporter_address: ""  # Override via vault.yml (e.g. redis://host:6379)
+
+# Toggle individual exporters
+deploy_mongodb_exporter: true
+deploy_postgres_exporter: true
+deploy_redis_exporter: true

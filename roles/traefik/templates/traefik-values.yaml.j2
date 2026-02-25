@@ -1,0 +1,139 @@
+image:
+  tag: "{{ traefik_version }}"
+
+deployment:
+  replicas: {{ traefik_replicas }}
+
+# API / Dashboard
+api:
+  dashboard: true
+  insecure: true
+
+# Entrypoints
+ports:
+  websecure:
+    tls:
+      enabled: true
+    http3:
+      enabled: true
+
+# Service configuration
+service:
+  type: ClusterIP
+{% if traefik_external_ips | length > 0 %}
+  spec:
+    externalIPs:
+{% for ip in traefik_external_ips %}
+      - "{{ ip }}"
+{% endfor %}
+{% endif %}
+
+# Persistence for ACME certificates
+persistence:
+  enabled: true
+  size: "{{ traefik_acme_storage_size }}"
+
+# Environment variables
+env:
+  - name: USER
+    value: traefik
+  - name: OTEL_PROPAGATORS
+    value: tracecontext,baggage
+{% if cloudflare_api_token | default('') | length > 0 %}
+  - name: CF_DNS_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: CF_DNS_API_TOKEN
+{% endif %}
+
+# Providers
+providers:
+  kubernetesCRD:
+    allowCrossNamespace: true
+    allowEmptyServices: true
+    enabled: true
+  kubernetesGateway:
+    enabled: true
+  kubernetesIngress:
+    enabled: false
+
+# Access logs
+logs:
+  access:
+    enabled: true
+    format: "{{ traefik_access_log_format }}"
+    fields:
+      defaultMode: keep
+      headers:
+        defaultMode: drop
+        names:
+          Content-Type: keep
+          Referer: keep
+          User-Agent: keep
+          X-Forwarded-For: keep
+
+# Metrics & Tracing via additionalArguments
+additionalArguments:
+  - "--serverstransport.insecureskipverify=true"
+{% if cloudflare_api_token | default('') | length > 0 %}
+  - "--certificatesresolvers.cf.acme.email={{ traefik_acme_email }}"
+  - "--certificatesresolvers.cf.acme.storage=/data/acme.json"
+  - "--certificatesresolvers.cf.acme.dnschallenge=true"
+  - "--certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare"
+  - "--certificatesresolvers.cf.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+{% endif %}
+  - "--metrics.prometheus=true"
+  - "--metrics.prometheus.addEntryPointsLabels=true"
+  - "--metrics.prometheus.addRoutersLabels=true"
+  - "--metrics.prometheus.addServicesLabels=true"
+{% if traefik_otlp_endpoint | default('') | length > 0 %}
+  - "--tracing=true"
+  - "--tracing.otlp=true"
+  - "--tracing.otlp.grpc.endpoint={{ traefik_otlp_endpoint }}"
+  - "--tracing.otlp.grpc.insecure=true"
+{% endif %}
+
+{% if traefik_otlp_endpoint | default('') | length > 0 %}
+# Tracing block (complements additionalArguments)
+tracing:
+  otlp:
+    grpc:
+      enabled: true
+      endpoint: "{{ traefik_otlp_endpoint }}"
+      insecure: true
+{% endif %}
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Tolerations for master nodes
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+
+# Affinity - prefer spreading across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - traefik
+          topologyKey: kubernetes.io/hostname
