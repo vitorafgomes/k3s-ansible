@@ -10,3 +10,4 @@ traefik_cors_allowed_origins:
   - "https://vitorafgomes.net"
   - "https://smart-management.vitorafgomes.net"
   - "https://ui.vitorafgomes.net"
+  - "http://localhost:4200"
