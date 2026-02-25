@@ -61,6 +61,21 @@
       retries: 10
       delay: 10
 
+    - name: Copy Smart Management dashboard ConfigMap to tmp
+      ansible.builtin.copy:
+        src: dashboards/configmap-smart-management-dashboards.yaml
+        dest: /tmp/k3s/configmap-smart-management-dashboards.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Smart Management dashboard ConfigMap
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply
+        -f /tmp/k3s/configmap-smart-management-dashboards.yaml
+      register: sm_dashboards
+      changed_when: "'configured' in sm_dashboards.stdout or 'created' in sm_dashboards.stdout"
+
     - name: Verify Grafana pods
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/name=grafana"
