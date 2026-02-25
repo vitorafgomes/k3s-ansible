@@ -18,3 +18,15 @@ prometheus:
 
 prometheus-node-exporter:
   enabled: true
+  livenessProbe:
+    httpGet:
+      path: /metrics
+      port: http-metrics
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /metrics
+      port: http-metrics
+    initialDelaySeconds: 10
+    periodSeconds: 10
