@@ -179,7 +179,7 @@
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 # =============================================================================
-# Phase 3 - Autoscaling & Identity
+# Phase 3 - Autoscaling
 # =============================================================================
 
 - name: Deploy KEDA
@@ -189,14 +189,6 @@
   tags: [autoscaling, keda]
   roles:
     - role: keda
-
-- name: Deploy Rancher
-  hosts: master
-  become: true
-  environment: "{{ proxy_env | default({}) }}"
-  tags: [autoscaling, rancher]
-  roles:
-    - role: rancher
 
 - name: Verify Phase 3 deployment
   hosts: master
@@ -211,24 +203,6 @@
     - name: Verify KEDA CRDs
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get crd -l app.kubernetes.io/name=keda-operator
-      changed_when: false
-      run_once: true
-
-    - name: Verify Rancher pods
-      ansible.builtin.command: >-
-        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n cattle-system -o wide
-      changed_when: false
-      run_once: true
-
-    - name: Verify Rancher certificate
-      ansible.builtin.command: >-
-        {{ k3s_kubectl_binary | default('k3s kubectl') }} get certificate -n cattle-system
-      changed_when: false
-      run_once: true
-
-    - name: Verify Rancher IngressRoute
-      ansible.builtin.command: >-
-        {{ k3s_kubectl_binary | default('k3s kubectl') }} get ingressroute -n cattle-system
       changed_when: false
       run_once: true
 
