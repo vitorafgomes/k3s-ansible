@@ -20,6 +20,9 @@ spec:
     solvers:
       - dns01:
           cloudflare:
+{% if cloudflare_zone_id | default('') | length > 0 %}
+            zoneID: "{{ cloudflare_zone_id }}"
+{% endif %}
             apiTokenSecretRef:
               name: cloudflare-api-token-secret
               key: api-token
@@ -44,6 +47,9 @@ spec:
     solvers:
       - dns01:
           cloudflare:
+{% if cloudflare_zone_id | default('') | length > 0 %}
+            zoneID: "{{ cloudflare_zone_id }}"
+{% endif %}
             apiTokenSecretRef:
               name: cloudflare-api-token-secret
               key: api-token

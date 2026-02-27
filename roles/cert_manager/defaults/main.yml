@@ -4,3 +4,7 @@ acme_email: ""
 
 # Cloudflare API token for DNS-01 solver (override via vault.yml)
 cloudflare_api_token: ""
+
+# Cloudflare Zone ID for DNS-01 solver (override via vault.yml)
+# Required to avoid zone auto-discovery issues with the Cloudflare API
+cloudflare_zone_id: ""
