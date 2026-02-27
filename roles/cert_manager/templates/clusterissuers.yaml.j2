@@ -18,14 +18,24 @@ spec:
       name: letsencrypt-staging-account-key
 {% if cloudflare_api_token | default('') | length > 0 %}
     solvers:
-      - dns01:
+{% if cloudflare_dns_zones | default([]) | length > 0 %}
+      - selector:
+          dnsZones:
+{% for zone in cloudflare_dns_zones %}
+            - "{{ zone }}"
+{% endfor %}
+        dns01:
           cloudflare:
-{% if cloudflare_zone_id | default('') | length > 0 %}
-            zoneID: "{{ cloudflare_zone_id }}"
-{% endif %}
             apiTokenSecretRef:
               name: cloudflare-api-token-secret
               key: api-token
+{% else %}
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token-secret
+              key: api-token
+{% endif %}
 {% else %}
     solvers:
       - http01:
@@ -45,14 +55,24 @@ spec:
       name: letsencrypt-prod-account-key
 {% if cloudflare_api_token | default('') | length > 0 %}
     solvers:
-      - dns01:
+{% if cloudflare_dns_zones | default([]) | length > 0 %}
+      - selector:
+          dnsZones:
+{% for zone in cloudflare_dns_zones %}
+            - "{{ zone }}"
+{% endfor %}
+        dns01:
           cloudflare:
-{% if cloudflare_zone_id | default('') | length > 0 %}
-            zoneID: "{{ cloudflare_zone_id }}"
-{% endif %}
             apiTokenSecretRef:
               name: cloudflare-api-token-secret
               key: api-token
+{% else %}
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token-secret
+              key: api-token
+{% endif %}
 {% else %}
     solvers:
       - http01:
