@@ -91,6 +91,21 @@
       register: sm_e2e_dashboard
       changed_when: "'configured' in sm_e2e_dashboard.stdout or 'created' in sm_e2e_dashboard.stdout"
 
+    - name: Copy alert rules ConfigMap to tmp
+      ansible.builtin.copy:
+        src: alerting/configmap-alert-rules.yaml
+        dest: /tmp/k3s/configmap-alert-rules.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply alert rules ConfigMap
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply
+        -f /tmp/k3s/configmap-alert-rules.yaml
+      register: alert_rules
+      changed_when: "'configured' in alert_rules.stdout or 'created' in alert_rules.stdout"
+
     - name: Verify Grafana pods
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/name=grafana"
