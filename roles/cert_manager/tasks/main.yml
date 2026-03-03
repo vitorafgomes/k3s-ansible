@@ -94,3 +94,17 @@
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get clusterissuers
       changed_when: false
+
+    - name: Template cert-manager ServiceMonitor manifest
+      ansible.builtin.template:
+        src: servicemonitor.yaml.j2
+        dest: /tmp/k3s/cert-manager-servicemonitor.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply cert-manager ServiceMonitor
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/cert-manager-servicemonitor.yaml
+      register: cm_sm_result
+      changed_when: "'created' in cm_sm_result.stdout or 'configured' in cm_sm_result.stdout"
