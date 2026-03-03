@@ -150,6 +150,34 @@ datasources:
         jsonData:
           minStep: "15s"
 
+alerting:
+  contactpoints.yaml:
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: github-issues
+        receivers:
+          - uid: github-issues-webhook
+            type: webhook
+            settings:
+              url: "{{ grafana_webhook_url }}"
+              httpMethod: POST
+              maxAlerts: 1
+            disableResolveMessage: false
+
+  notification-policies.yaml:
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: grafana-default-email
+        group_by: ['grafana_folder', 'alertname']
+        routes:
+          - receiver: github-issues
+            group_by: ['alertname']
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+
 sidecar:
   dashboards:
     enabled: true
@@ -159,6 +187,11 @@ sidecar:
     folderAnnotation: grafana_folder
     provider:
       foldersFromFilesStructure: true
+  alerts:
+    enabled: true
+    searchNamespace: ALL
+    label: grafana_alert
+    labelValue: "1"
 
 service:
   type: ClusterIP
