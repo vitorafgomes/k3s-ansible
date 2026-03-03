@@ -3,6 +3,15 @@ deploymentMode: SingleBinary
 singleBinary:
   replicas: {{ loki_replicas }}
 
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+
 loki:
   auth_enabled: false
   commonConfig:
