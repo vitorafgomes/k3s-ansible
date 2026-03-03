@@ -1,5 +1,8 @@
 assertNoLeakedSecrets: false
 
+image:
+  tag: "{{ grafana_image_tag }}"
+
 adminUser: "{{ grafana_admin_user }}"
 adminPassword: "{{ grafana_admin_password }}"
 
@@ -15,6 +18,14 @@ grafana.ini:
   auth:
     disable_login_form: false
     oauth_auto_login: false
+  plugin.grafana-lokiexplore-app:
+    enabled: true
+  plugin.grafana-metricsdrilldown-app:
+    enabled: true
+  plugin.grafana-exploretraces-app:
+    enabled: true
+  plugin.grafana-pyroscope-app:
+    enabled: true
   auth.generic_oauth:
     enabled: {{ grafana_oauth_enabled | lower }}
     name: "{{ grafana_oauth_name }}"
