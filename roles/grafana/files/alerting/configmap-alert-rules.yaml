@@ -336,6 +336,7 @@ data:
                   expression: B
                   type: threshold
                   refId: C
+            noDataState: OK
             for: 5m
             labels:
               severity: critical
@@ -404,6 +405,7 @@ data:
                   expression: B
                   type: threshold
                   refId: C
+            noDataState: OK
             for: 0s
             labels:
               severity: warning
