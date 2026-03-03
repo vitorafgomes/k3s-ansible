@@ -3,7 +3,8 @@ monitoring_namespace: monitoring
 kps_release_name: kps
 kps_chart_version: "81.5.0"
 prometheus_retention: 15d
-prometheus_resources_limits_cpu: "1"
+prometheus_scrape_interval: 30s
+prometheus_resources_limits_cpu: "2"
 prometheus_resources_limits_memory: 4Gi
 prometheus_resources_requests_cpu: 200m
 prometheus_resources_requests_memory: 1Gi
