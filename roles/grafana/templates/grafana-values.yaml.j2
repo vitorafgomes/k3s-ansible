@@ -1,0 +1,168 @@
+adminUser: "{{ grafana_admin_user }}"
+adminPassword: "{{ grafana_admin_password }}"
+
+grafana.ini:
+  analytics:
+    check_for_updates: true
+  log:
+    mode: console
+    level: info
+  server:
+    root_url: "{{ grafana_root_url }}"
+    domain: "{{ grafana_domain }}"
+  auth:
+    disable_login_form: false
+    oauth_auto_login: false
+  auth.generic_oauth:
+    enabled: {{ grafana_oauth_enabled | lower }}
+    name: "{{ grafana_oauth_name }}"
+    allow_sign_up: true
+    client_id: "{{ grafana_oauth_client_id }}"
+    client_secret: "{{ grafana_oauth_client_secret }}"
+    scopes: "{{ grafana_oauth_scopes }}"
+    email_attribute_path: email
+    login_attribute_path: username
+    name_attribute_path: name
+    groups_attribute_path: groups
+    role_attribute_path: {{ grafana_oauth_role_attribute_path }}
+    auth_url: "{{ grafana_keycloak_url }}/realms/{{ grafana_oauth_realm }}/protocol/openid-connect/auth"
+    token_url: "{{ grafana_keycloak_url }}/realms/{{ grafana_oauth_realm }}/protocol/openid-connect/token"
+    api_url: "{{ grafana_keycloak_url }}/realms/{{ grafana_oauth_realm }}/protocol/openid-connect/userinfo"
+    signout_redirect_url: "{{ grafana_keycloak_url }}/realms/{{ grafana_oauth_realm }}/protocol/openid-connect/logout?redirect_uri={{ grafana_root_url }}"
+    use_refresh_token: true
+    tls_skip_verify_insecure: false
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: "{{ grafana_prometheus_url }}"
+        uid: PBFA97CFB590B2093
+        isDefault: true
+        access: proxy
+        jsonData:
+          exemplarTraceIdDestinations:
+            - datasourceUid: P214B5B846CF3925F
+              name: trace_id
+
+      - name: Loki
+        type: loki
+        url: "{{ grafana_loki_url }}"
+        uid: P8E80F9AEF21F6940
+        access: proxy
+        jsonData:
+          derivedFields:
+            - datasourceUid: P214B5B846CF3925F
+              matcherRegex: 'trace_id[=:]\s*([0-9a-fA-F]+)'
+              name: TraceID
+              url: "$${__value.raw}"
+            - datasourceUid: P214B5B846CF3925F
+              matcherRegex: 'traceId[=:]\s*([0-9a-fA-F]+)'
+              name: TraceID
+              url: "$${__value.raw}"
+            - datasourceUid: P214B5B846CF3925F
+              matcherRegex: 'traceID[=:]\s*([0-9a-fA-F]+)'
+              name: TraceID
+              url: "$${__value.raw}"
+            - datasourceUid: P214B5B846CF3925F
+              matcherRegex: '"trace_id"\\s*:\\s*"([0-9a-fA-F]+)"'
+              name: TraceID
+              url: "$${__value.raw}"
+            - datasourceUid: P214B5B846CF3925F
+              matcherRegex: '"traceId"\\s*:\\s*"([0-9a-fA-F]+)"'
+              name: TraceID
+              url: "$${__value.raw}"
+
+      - name: Tempo
+        type: tempo
+        url: "{{ grafana_tempo_url }}"
+        uid: P214B5B846CF3925F
+        access: proxy
+        jsonData:
+          httpMethod: GET
+          lokiSearch:
+            datasourceUid: P8E80F9AEF21F6940
+          nodeGraph:
+            enabled: true
+          search:
+            hide: false
+          serviceMap:
+            datasourceUid: PBFA97CFB590B2093
+          spanBar:
+            tag: http.path
+            type: Tag
+          traceQuery:
+            spanEndTimeShift: "-1h"
+            spanStartTimeShift: "1h"
+            timeShiftEnabled: true
+          tracesQueryLanguage: traceql
+          tracesToLogsV2:
+            customQuery: true
+            datasourceUid: P8E80F9AEF21F6940
+            filterBySpanID: false
+            filterByTraceID: true
+            query: '{$${__tags}} |~ "$${__span.traceId}"'
+            spanEndTimeShift: "1h"
+            spanStartTimeShift: "-1h"
+            tags:
+              - key: service.name
+                value: service_name
+              - key: namespace
+                value: namespace
+          tracesToMetrics:
+            datasourceUid: PBFA97CFB590B2093
+            queries:
+              - name: Request Rate
+                query: 'sum(rate(tempo_spanmetrics_calls_total{$${__tags}}[5m]))'
+              - name: Error Rate
+                query: 'sum(rate(tempo_spanmetrics_calls_total{$${__tags},status_code=~"5.."}[5m]))'
+              - name: Duration p95
+                query: 'histogram_quantile(0.95, sum(rate(tempo_spanmetrics_latency_bucket{$${__tags}}[5m])) by (le))'
+            spanEndTimeShift: "1h"
+            spanStartTimeShift: "-1h"
+            tags:
+              - key: service.name
+                value: service
+              - key: service.namespace
+                value: namespace
+              - key: http.method
+                value: method
+              - key: http.status_code
+                value: status_code
+          tracesToProfiles:
+            customQuery: true
+            datasourceUid: pyroscope
+            profileTypeId: "process_cpu:cpu:nanoseconds:cpu:nanoseconds"
+            query: 'service_name="${__span.tags["service.name"]}"'
+            tags:
+              - key: service.name
+                value: service_name
+              - key: service.namespace
+                value: namespace
+
+      - name: Pyroscope
+        type: grafana-pyroscope-datasource
+        url: "{{ grafana_pyroscope_url }}"
+        uid: pyroscope
+        access: proxy
+        jsonData:
+          minStep: "15s"
+
+sidecar:
+  dashboards:
+    enabled: true
+    searchNamespace: ALL
+    label: grafana_dashboard
+    labelValue: "1"
+    folderAnnotation: grafana_folder
+    provider:
+      foldersFromFilesStructure: true
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false

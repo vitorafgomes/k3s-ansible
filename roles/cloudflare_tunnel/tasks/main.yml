@@ -1,0 +1,71 @@
+---
+- name: Deploy Cloudflare Tunnel
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create cloudflare-tunnel namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ cloudflare_tunnel_namespace }}
+      register: cf_ns
+      failed_when: cf_ns.rc != 0 and 'already exists' not in cf_ns.stderr
+      changed_when: cf_ns.rc == 0
+
+    - name: Create Cloudflare Tunnel token secret
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f -
+      args:
+        stdin: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: tunnel-credentials
+            namespace: "{{ cloudflare_tunnel_namespace }}"
+          type: Opaque
+          stringData:
+            token: "{{ cloudflare_tunnel_token }}"
+      register: tunnel_secret
+      changed_when: "'created' in tunnel_secret.stdout or 'configured' in tunnel_secret.stdout"
+      when: cloudflare_tunnel_token | length > 0
+      no_log: true
+
+    - name: Template cloudflared deployment manifest
+      ansible.builtin.template:
+        src: cloudflared-deployment.yaml.j2
+        dest: /tmp/k3s/cloudflared-deployment.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply cloudflared deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/cloudflared-deployment.yaml
+      register: cf_deploy
+      changed_when: "'created' in cf_deploy.stdout or 'configured' in cf_deploy.stdout"
+
+    - name: Wait for cloudflared deployment to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/cloudflared-deployment
+        --namespace={{ cloudflare_tunnel_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: cf_wait
+      changed_when: false
+      until: cf_wait is succeeded
+      retries: 10
+      delay: 10
+      when: cloudflare_tunnel_token | length > 0
+
+    - name: Verify cloudflared pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ cloudflare_tunnel_namespace }}
+      changed_when: false

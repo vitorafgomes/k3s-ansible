@@ -1,0 +1,52 @@
+---
+- name: Deploy OpenTelemetry Collector
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ monitoring_namespace }}
+      register: monitoring_ns
+      failed_when: monitoring_ns.rc != 0 and 'already exists' not in monitoring_ns.stderr
+      changed_when: monitoring_ns.rc == 0
+
+    - name: Template OpenTelemetry Collector manifest
+      ansible.builtin.template:
+        src: otel-collector.yaml.j2
+        dest: /tmp/k3s/otel-collector.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply OpenTelemetry Collector
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/otel-collector.yaml
+      register: otel_result
+      changed_when: "'created' in otel_result.stdout or 'configured' in otel_result.stdout"
+
+    - name: Wait for OpenTelemetry Collector deployment
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/otel-collector
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: otel_wait
+      changed_when: false
+      until: otel_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Verify OpenTelemetry Collector pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "app.kubernetes.io/name=otel-collector"
+      changed_when: false

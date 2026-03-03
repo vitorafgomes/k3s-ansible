@@ -1,0 +1,96 @@
+---
+- name: Deploy cert-manager
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: "{{ ansible_user_dir }}/.kube/config"
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Check if cert-manager namespace exists
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get namespace cert-manager
+      register: cert_manager_ns
+      failed_when: false
+      changed_when: false
+
+    - name: Install cert-manager CRDs and resources
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f
+        https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml
+      register: cert_manager_install
+      changed_when: "'created' in cert_manager_install.stdout or 'configured' in cert_manager_install.stdout"
+
+    - name: Wait for cert-manager webhook to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/cert-manager-webhook
+        --namespace=cert-manager
+        --for=condition=Available
+        --timeout=120s
+      register: cm_wait
+      changed_when: false
+      until: cm_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Wait for cert-manager controller to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/cert-manager
+        --namespace=cert-manager
+        --for=condition=Available
+        --timeout=120s
+      changed_when: false
+
+    - name: Wait for cert-manager cainjector to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/cert-manager-cainjector
+        --namespace=cert-manager
+        --for=condition=Available
+        --timeout=120s
+      changed_when: false
+
+    - name: Create Cloudflare API token secret for cert-manager
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f -
+      args:
+        stdin: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: cloudflare-api-token-secret
+            namespace: cert-manager
+          type: Opaque
+          stringData:
+            api-token: "{{ cloudflare_api_token }}"
+      register: cf_secret
+      changed_when: "'created' in cf_secret.stdout or 'configured' in cf_secret.stdout"
+      when: cloudflare_api_token | default('') | length > 0
+      no_log: true
+
+    - name: Template ClusterIssuers manifest
+      ansible.builtin.template:
+        src: clusterissuers.yaml.j2
+        dest: /tmp/k3s/clusterissuers.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply ClusterIssuers
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/clusterissuers.yaml
+      register: issuers_result
+      changed_when: "'created' in issuers_result.stdout or 'configured' in issuers_result.stdout"
+      until: issuers_result.rc == 0
+      retries: 5
+      delay: 10
+
+    - name: Verify ClusterIssuers
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get clusterissuers
+      changed_when: false

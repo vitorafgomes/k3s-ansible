@@ -1,0 +1,17 @@
+pyroscope:
+  replicaCount: {{ pyroscope_replicas }}
+  persistence:
+    enabled: true
+    size: {{ pyroscope_storage_size }}
+  service:
+    port: 4040
+    type: ClusterIP
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  extraArgs:
+    log.level: info

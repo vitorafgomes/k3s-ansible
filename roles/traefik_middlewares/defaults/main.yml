@@ -1,0 +1,13 @@
+---
+traefik_namespace: traefik
+
+traefik_admin_allowed_ips:
+  - 192.168.50.0/24
+  - 10.0.0.0/8
+  - 127.0.0.1/32
+
+traefik_cors_allowed_origins:
+  - "https://vitorafgomes.net"
+  - "https://smart-management.vitorafgomes.net"
+  - "https://ui.vitorafgomes.net"
+  - "http://localhost:4200"

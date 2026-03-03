@@ -1,0 +1,88 @@
+alertmanager:
+  enabled: true
+
+grafana:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    enableRemoteWriteReceiver: true
+    scrapeInterval: "{{ prometheus_scrape_interval }}"
+    resources:
+      limits:
+        cpu: "{{ prometheus_resources_limits_cpu }}"
+        memory: {{ prometheus_resources_limits_memory }}
+      requests:
+        cpu: {{ prometheus_resources_requests_cpu }}
+        memory: {{ prometheus_resources_requests_memory }}
+    retention: {{ prometheus_retention }}
+
+kubeApiServer:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "apiserver_request_duration_seconds_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_request_sli_duration_seconds_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_request_body_size_bytes_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_response_sizes_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_watch_cache_read_wait_seconds_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_watch_list_duration_seconds_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_watch_events_sizes_bucket"
+        action: drop
+
+kubeEtcd:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "etcd_request_duration_seconds_bucket"
+        action: drop
+
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "apiserver_request_duration_seconds_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_request_sli_duration_seconds_bucket"
+        action: drop
+
+prometheus-node-exporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  # NOTE: probe path is hardcoded to / in subchart template (not configurable).
+  # Post-upgrade task patches DaemonSet to use /metrics instead.
+  livenessProbe:
+    httpGet:
+      httpHeaders: []
+      scheme: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      httpHeaders: []
+      scheme: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

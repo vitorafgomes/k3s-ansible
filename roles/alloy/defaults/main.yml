@@ -1,0 +1,13 @@
+---
+monitoring_namespace: monitoring
+alloy_release_name: alloy
+alloy_chart_version: "1.5.3"
+alloy_replicas: 2
+alloy_resources_requests_cpu: 300m
+alloy_resources_requests_memory: 768Mi
+alloy_resources_limits_cpu: "2"
+alloy_resources_limits_memory: 2Gi
+alloy_tempo_endpoint: "tempo.monitoring.svc.cluster.local:4317"
+alloy_loki_endpoint: "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+alloy_prometheus_endpoint: "http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/write"
+alloy_pyroscope_endpoint: "http://pyroscope.monitoring.svc.cluster.local:4040"

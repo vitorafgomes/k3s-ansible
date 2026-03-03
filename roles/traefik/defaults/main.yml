@@ -1,0 +1,21 @@
+---
+traefik_version: v3.5.2
+traefik_chart_version: "37.1.1"
+traefik_acme_email: ""
+traefik_namespace: traefik
+traefik_replicas: 1
+
+# ExternalIPs for the Traefik service (worker node IPs)
+traefik_external_ips: []
+
+# Cloudflare API token for ACME DNS challenge (override via vault.yml)
+cloudflare_api_token: ""
+
+# ACME storage PVC size
+traefik_acme_storage_size: 128Mi
+
+# OTLP endpoint for tracing (e.g. alloy.monitoring.svc.cluster.local:4317)
+traefik_otlp_endpoint: ""
+
+# Access log format
+traefik_access_log_format: json

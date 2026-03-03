@@ -1,0 +1,6 @@
+---
+monitoring_namespace: monitoring
+loki_release_name: loki
+loki_chart_version: "6.51.0"
+loki_replicas: 1
+loki_chunks_cache_memory: 2048

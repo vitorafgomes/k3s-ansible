@@ -1,0 +1,26 @@
+---
+monitoring_namespace: monitoring
+grafana_release_name: grafana
+grafana_chart_version: "10.5.15"
+grafana_admin_user: admin
+grafana_admin_password: ""  # Override via vault.yml
+
+# Datasource URLs
+grafana_prometheus_url: "http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090"
+grafana_loki_url: "http://loki-gateway.monitoring.svc.cluster.local"
+grafana_tempo_url: "http://tempo.monitoring.svc.cluster.local:3200"
+grafana_pyroscope_url: "http://pyroscope.monitoring.svc.cluster.local:4040"
+
+# Server config
+grafana_domain: "grafana.vitorafgomes.net"
+grafana_root_url: "https://grafana.vitorafgomes.net"
+
+# OAuth / Keycloak config
+grafana_oauth_enabled: true
+grafana_oauth_name: "Keycloak (Infrastructure)"
+grafana_oauth_client_id: "grafana"
+grafana_oauth_client_secret: ""  # Override via vault.yml
+grafana_oauth_realm: "infrastructure"
+grafana_keycloak_url: "https://keycloak.vitorafgomes.net"
+grafana_oauth_scopes: "openid email profile offline_access roles"
+grafana_oauth_role_attribute_path: "contains(resource_access.grafana.roles[*], 'Admin') && 'Admin' || contains(resource_access.grafana.roles[*], 'Editor') && 'Editor' || 'Viewer'"

@@ -1,0 +1,36 @@
+replicas: {{ alloy_replicas }}
+
+alloy:
+  configMap:
+    content: |
+{% filter indent(width=6, first=true) %}
+{% include 'alloy-config.alloy.j2' %}
+{% endfilter %}
+
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+
+  resources:
+    requests:
+      cpu: {{ alloy_resources_requests_cpu }}
+      memory: {{ alloy_resources_requests_memory }}
+    limits:
+      cpu: "{{ alloy_resources_limits_cpu }}"
+      memory: {{ alloy_resources_limits_memory }}
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+
+controller:
+  type: deployment
+  replicas: {{ alloy_replicas }}

@@ -1,0 +1,109 @@
+---
+- name: Deploy kube-prometheus-stack
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  block:
+    - name: Create tmp directory
+      ansible.builtin.file:
+        path: /tmp/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} create namespace {{ monitoring_namespace }}
+      register: monitoring_ns
+      failed_when: monitoring_ns.rc != 0 and 'already exists' not in monitoring_ns.stderr
+      changed_when: monitoring_ns.rc == 0
+
+    - name: Add prometheus-community Helm repo
+      ansible.builtin.command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      register: helm_repo
+      failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+      changed_when: helm_repo.rc == 0
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Template kube-prometheus-stack Helm values
+      ansible.builtin.template:
+        src: kps-values.yaml.j2
+        dest: /tmp/k3s/kps-values.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install/Upgrade kube-prometheus-stack via Helm
+      ansible.builtin.command: >-
+        helm upgrade --install {{ kps_release_name }} prometheus-community/kube-prometheus-stack
+        --namespace {{ monitoring_namespace }}
+        --version {{ kps_chart_version }}
+        -f /tmp/k3s/kps-values.yaml
+        --wait
+        --timeout 10m
+      register: kps_install
+      changed_when: "'has been upgraded' in kps_install.stdout or 'has been installed' in kps_install.stdout"
+
+    - name: Wait for prometheus-operator deployment to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} wait deployment/{{ kps_release_name }}-kube-prometheus-stack-operator
+        --namespace={{ monitoring_namespace }}
+        --for=condition=Available
+        --timeout=120s
+      register: kps_operator_wait
+      changed_when: false
+      until: kps_operator_wait is succeeded
+      retries: 10
+      delay: 10
+
+    - name: Wait for alertmanager statefulset to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} rollout status statefulset/alertmanager-{{ kps_release_name }}-kube-prometheus-stack-alertmanager
+        --namespace={{ monitoring_namespace }}
+        --timeout=120s
+      changed_when: false
+
+    - name: Wait for prometheus statefulset to be ready
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} rollout status statefulset/prometheus-{{ kps_release_name }}-kube-prometheus-stack-prometheus
+        --namespace={{ monitoring_namespace }}
+        --timeout=120s
+      changed_when: false
+
+    - name: Patch node-exporter DaemonSet probe path (chart hardcodes / instead of /metrics)
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} patch daemonset {{ kps_release_name }}-prometheus-node-exporter
+        --namespace={{ monitoring_namespace }}
+        --type=json
+        -p='[{"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/httpGet/path","value":"/metrics"},{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/metrics"}]'
+      register: ne_patch
+      changed_when: "'patched' in ne_patch.stdout"
+      failed_when: ne_patch.rc != 0
+
+    - name: Wait for node-exporter DaemonSet rollout
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} rollout status daemonset/{{ kps_release_name }}-prometheus-node-exporter
+        --namespace={{ monitoring_namespace }}
+        --timeout=300s
+      changed_when: false
+
+    - name: Remove duplicate Cilium ServiceMonitors from monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} delete servicemonitor {{ item }}
+        --namespace={{ monitoring_namespace }}
+        --ignore-not-found=true
+      loop:
+        - cilium-agent
+        - cilium-operator
+      register: sm_cleanup
+      changed_when: "'deleted' in sm_cleanup.stdout"
+
+    - name: Verify kube-prometheus-stack pods
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "release={{ kps_release_name }}"
+      changed_when: false

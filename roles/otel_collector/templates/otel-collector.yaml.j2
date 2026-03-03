@@ -1,0 +1,145 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: "{{ monitoring_namespace }}"
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:{{ otel_collector_extra_port }}
+            cors:
+              allowed_origins:
+{% for origin in otel_collector_cors_origins %}
+                - "{{ origin }}"
+{% endfor %}
+              allowed_headers:
+                - "*"
+          grpc:
+            endpoint: 0.0.0.0:{{ otel_collector_grpc_port }}
+
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: {{ otel_collector_batch_size }}
+
+      resource:
+        attributes:
+          - key: service.name
+            from_attribute: service.name
+            action: upsert
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo.{{ monitoring_namespace }}.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+      debug:
+        verbosity: {{ otel_collector_debug_verbosity }}
+        sampling_initial: 5
+        sampling_thereafter: 200
+
+      otlphttp/loki:
+        endpoint: http://loki-gateway.{{ monitoring_namespace }}.svc.cluster.local/otlp
+
+    service:
+      pipelines:
+        logs:
+          receivers: [otlp]
+          processors: [resource, batch]
+          exporters: [debug, otlphttp/loki]
+        traces:
+          receivers: [otlp]
+          processors: [resource, batch]
+          exporters: [debug, otlp/tempo]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: "{{ monitoring_namespace }}"
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/component: telemetry-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+        app.kubernetes.io/name: otel-collector
+      annotations:
+        checksum/config: "__ANSIBLE_MANAGED__"
+    spec:
+      containers:
+        - name: otel-collector
+          image: "{{ otel_collector_image }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/otel/collector.yaml
+          env:
+            - name: GOMEMLIMIT
+              value: "{{ otel_collector_gomemlimit }}"
+          ports:
+            - containerPort: {{ otel_collector_grpc_port }}
+              name: otlp-grpc
+              protocol: TCP
+            - containerPort: {{ otel_collector_extra_port }}
+              name: otlp-http
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          resources:
+            requests:
+              cpu: "{{ otel_collector_resources_requests_cpu }}"
+              memory: "{{ otel_collector_resources_requests_memory }}"
+            limits:
+              cpu: "{{ otel_collector_resources_limits_cpu }}"
+              memory: "{{ otel_collector_resources_limits_memory }}"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: "{{ monitoring_namespace }}"
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: otel-collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ otel_collector_grpc_port }}
+      targetPort: otlp-grpc
+      protocol: TCP
+      name: otlp-grpc
+    - port: {{ otel_collector_extra_port }}
+      targetPort: otlp-http
+      protocol: TCP
+      name: otlp-http
+  selector:
+    app: otel-collector

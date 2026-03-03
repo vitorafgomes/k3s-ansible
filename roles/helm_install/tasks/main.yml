@@ -1,0 +1,43 @@
+---
+- name: Install Helm CLI on first master
+  when: ansible_hostname == hostvars[groups[group_name_master | default('master')][0]]['ansible_hostname']
+  run_once: true
+  block:
+    - name: Check if Helm is installed
+      ansible.builtin.command: helm version --short
+      register: helm_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Install Helm CLI
+      when: helm_installed.rc != 0
+      block:
+        - name: Create tmp directory
+          ansible.builtin.file:
+            path: /tmp/k3s
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Download Helm install script
+          ansible.builtin.get_url:
+            url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+            dest: /tmp/k3s/get_helm.sh
+            mode: "0700"
+
+        - name: Install Helm
+          ansible.builtin.command: /tmp/k3s/get_helm.sh
+          environment:
+            DESIRED_VERSION: "{{ helm_version }}"
+          register: helm_install_result
+          changed_when: helm_install_result.rc == 0
+
+        - name: Remove Helm install script
+          ansible.builtin.file:
+            path: /tmp/k3s/get_helm.sh
+            state: absent
+
+    - name: Verify Helm installation
+      ansible.builtin.command: helm version --short
+      changed_when: false

@@ -179,6 +179,9 @@
         --helm-set bgpControlPlane.enabled={{ cilium_bgp | default("false") }}
         --helm-set hubble.enabled={{ "true" if cilium_hubble else "false" }}
         --helm-set hubble.relay.enabled={{ "true" if cilium_hubble else "false" }}
+        --helm-set hubble.relay.resources.requests.cpu=10m
+        --helm-set hubble.relay.resources.requests.memory=128Mi
+        --helm-set hubble.relay.resources.limits.memory=256Mi
         --helm-set hubble.ui.enabled={{ "true" if cilium_hubble else "false" }}
         {% if kube_proxy_replacement is not false %}
         --helm-set bpf.loadBalancer.algorithm={{ bpf_lb_algorithm }}
