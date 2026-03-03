@@ -92,6 +92,17 @@
         --timeout=300s
       changed_when: false
 
+    - name: Remove duplicate Cilium ServiceMonitors from monitoring namespace
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} delete servicemonitor {{ item }}
+        --namespace={{ monitoring_namespace }}
+        --ignore-not-found=true
+      loop:
+        - cilium-agent
+        - cilium-operator
+      register: sm_cleanup
+      changed_when: "'deleted' in sm_cleanup.stdout"
+
     - name: Verify kube-prometheus-stack pods
       ansible.builtin.command: >-
         {{ k3s_kubectl_binary | default('k3s kubectl') }} get pods -n {{ monitoring_namespace }} -l "release={{ kps_release_name }}"
