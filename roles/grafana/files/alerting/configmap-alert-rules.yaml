@@ -156,7 +156,7 @@ data:
                 datasourceUid: PBFA97CFB590B2093
                 model:
                   expr: >-
-                    increase(kube_pod_container_status_restarts_total[10m]) > 3
+                    increase(kube_pod_container_status_restarts_total[10m])
                   instant: false
                   intervalMs: 1000
                   maxDataPoints: 43200
@@ -190,7 +190,7 @@ data:
                 model:
                   conditions:
                     - evaluator:
-                        params: [0]
+                        params: [3]
                         type: gt
                       operator:
                         type: and
@@ -202,6 +202,7 @@ data:
                   expression: B
                   type: threshold
                   refId: C
+            noDataState: OK
             for: 0s
             labels:
               severity: critical
@@ -219,7 +220,7 @@ data:
                 datasourceUid: PBFA97CFB590B2093
                 model:
                   expr: >-
-                    kube_pod_status_ready{condition="true"} == 0
+                    kube_pod_status_ready{condition="true"}
                   instant: false
                   intervalMs: 1000
                   maxDataPoints: 43200
@@ -253,8 +254,8 @@ data:
                 model:
                   conditions:
                     - evaluator:
-                        params: [0]
-                        type: gt
+                        params: [1]
+                        type: lt
                       operator:
                         type: and
                       query:
@@ -265,6 +266,7 @@ data:
                   expression: B
                   type: threshold
                   refId: C
+            noDataState: OK
             for: 5m
             labels:
               severity: critical
@@ -290,7 +292,7 @@ data:
                     sum(rate(http_requests_total{code=~"5.."}[5m]))
                     /
                     sum(rate(http_requests_total[5m]))
-                    * 100 > 5
+                    * 100
                   instant: false
                   intervalMs: 1000
                   maxDataPoints: 43200
@@ -324,7 +326,7 @@ data:
                 model:
                   conditions:
                     - evaluator:
-                        params: [0]
+                        params: [5]
                         type: gt
                       operator:
                         type: and
@@ -359,7 +361,7 @@ data:
                 datasourceUid: PBFA97CFB590B2093
                 model:
                   expr: >-
-                    (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 7
+                    (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400
                   instant: false
                   intervalMs: 1000
                   maxDataPoints: 43200
@@ -393,8 +395,8 @@ data:
                 model:
                   conditions:
                     - evaluator:
-                        params: [0]
-                        type: gt
+                        params: [7]
+                        type: lt
                       operator:
                         type: and
                       query:
